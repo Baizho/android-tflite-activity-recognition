@@ -1,6 +1,9 @@
 package com.baizho.hartflite
 
-import android.annotation.SuppressLint
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -9,8 +12,16 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.roundToInt
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var interpreter: Interpreter
+    private lateinit var sensorManager: SensorManager
+    private lateinit var outputText: TextView
+
+    private var latestAccel = FloatArray(3) { 0f }
+    private var latestGyro = FloatArray(3) { 0f }
+
+    private var accelSamples = 0
+    private var gyroSamples = 0
 
     private val activityLabels = listOf(
         "WALKING",
@@ -21,17 +32,42 @@ class MainActivity : AppCompatActivity() {
         "LAYING"
     )
 
-    @SuppressLint("SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val outputText = TextView(this)
-        outputText.textSize = 18f
+        outputText = TextView(this)
+        outputText.textSize = 16f
         outputText.setPadding(32, 64, 32, 32)
         setContentView(outputText)
 
         interpreter = Interpreter(loadModelFile("har_baseline_dynamic_quant.tflite"))
 
+        runDummyInference()
+
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+
+        val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+
+        if (accelerometer == null || gyroscope == null) {
+            outputText.text = "Required sensors not available on this device/emulator."
+            return
+        }
+
+        sensorManager.registerListener(
+            this,
+            accelerometer,
+            SensorManager.SENSOR_DELAY_GAME
+        )
+
+        sensorManager.registerListener(
+            this,
+            gyroscope,
+            SensorManager.SENSOR_DELAY_GAME
+        )
+    }
+
+    private fun runDummyInference() {
         val input = Array(1) { FloatArray(561) { 0.0f } }
         val output = Array(1) { FloatArray(6) }
 
@@ -45,14 +81,55 @@ class MainActivity : AppCompatActivity() {
 
         outputText.text = """
             TFLite model loaded successfully.
-            
-            Input shape: [1, 561]
-            Output shape: [1, 6]
-            
+
             Dummy prediction: ${activityLabels[predictedIndex]}
             Confidence: ${(confidence * 100).roundToInt()} percent
             Latency: ${"%.4f".format(latencyMs)} ms
+
+            Waiting for sensor data...
         """.trimIndent()
+    }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        when (event.sensor.type) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                latestAccel = event.values.clone()
+                accelSamples++
+            }
+
+            Sensor.TYPE_GYROSCOPE -> {
+                latestGyro = event.values.clone()
+                gyroSamples++
+            }
+        }
+
+        updateSensorDisplay()
+    }
+
+    private fun updateSensorDisplay() {
+        outputText.text = """
+            TFLite model loaded successfully.
+
+            Live Sensor Stream
+
+            Accelerometer:
+            x = ${"%.3f".format(latestAccel[0])}
+            y = ${"%.3f".format(latestAccel[1])}
+            z = ${"%.3f".format(latestAccel[2])}
+            samples = $accelSamples
+
+            Gyroscope:
+            x = ${"%.3f".format(latestGyro[0])}
+            y = ${"%.3f".format(latestGyro[1])}
+            z = ${"%.3f".format(latestGyro[2])}
+            samples = $gyroSamples
+
+            Next: sliding-window buffering + live inference.
+        """.trimIndent()
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // Not used yet
     }
 
     private fun loadModelFile(filename: String): ByteBuffer {
@@ -67,6 +144,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        sensorManager.unregisterListener(this)
         interpreter.close()
         super.onDestroy()
     }
