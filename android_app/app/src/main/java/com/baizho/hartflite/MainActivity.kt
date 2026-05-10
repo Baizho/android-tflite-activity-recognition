@@ -22,6 +22,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private var accelSamples = 0
     private var gyroSamples = 0
+    private var combinedSamples = 0
+
+    private val windowSize = 128
+    private val sensorWindow = ArrayDeque<FloatArray>()
 
     private val activityLabels = listOf(
         "WALKING",
@@ -41,7 +45,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         setContentView(outputText)
 
         interpreter = Interpreter(loadModelFile("har_baseline_dynamic_quant.tflite"))
-
         runDummyInference()
 
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
@@ -54,17 +57,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             return
         }
 
-        sensorManager.registerListener(
-            this,
-            accelerometer,
-            SensorManager.SENSOR_DELAY_GAME
-        )
-
-        sensorManager.registerListener(
-            this,
-            gyroscope,
-            SensorManager.SENSOR_DELAY_GAME
-        )
+        sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
+        sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_GAME)
     }
 
     private fun runDummyInference() {
@@ -86,7 +80,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             Confidence: ${(confidence * 100).roundToInt()} percent
             Latency: ${"%.4f".format(latencyMs)} ms
 
-            Waiting for sensor data...
+            Waiting for live sensor data...
         """.trimIndent()
     }
 
@@ -95,6 +89,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             Sensor.TYPE_ACCELEROMETER -> {
                 latestAccel = event.values.clone()
                 accelSamples++
+                addCombinedSample()
             }
 
             Sensor.TYPE_GYROSCOPE -> {
@@ -106,11 +101,25 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         updateSensorDisplay()
     }
 
-    private fun updateSensorDisplay() {
-        outputText.text = """
-            TFLite model loaded successfully.
+    private fun addCombinedSample() {
+        val sample = floatArrayOf(
+            latestAccel[0], latestAccel[1], latestAccel[2],
+            latestGyro[0], latestGyro[1], latestGyro[2]
+        )
 
-            Live Sensor Stream
+        sensorWindow.addLast(sample)
+        combinedSamples++
+
+        if (sensorWindow.size > windowSize) {
+            sensorWindow.removeFirst()
+        }
+    }
+
+    private fun updateSensorDisplay() {
+        val windowReady = sensorWindow.size == windowSize
+
+        outputText.text = """
+            Live Sensor Stream + Sliding Window
 
             Accelerometer:
             x = ${"%.3f".format(latestAccel[0])}
@@ -124,7 +133,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             z = ${"%.3f".format(latestGyro[2])}
             samples = $gyroSamples
 
-            Next: sliding-window buffering + live inference.
+            Combined samples = $combinedSamples
+            Window size = ${sensorWindow.size} / $windowSize
+            Window ready = $windowReady
+
+            Current model expects 561 engineered UCI HAR features.
+            Next step: train raw-window model with input [128, 6].
         """.trimIndent()
     }
 
