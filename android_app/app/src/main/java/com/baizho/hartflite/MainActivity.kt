@@ -23,9 +23,24 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var accelSamples = 0
     private var gyroSamples = 0
     private var combinedSamples = 0
+    private var inferenceCount = 0
 
     private val windowSize = 128
     private val sensorWindow = ArrayDeque<FloatArray>()
+
+    private var lastPrediction = "Waiting..."
+    private var lastConfidence = 0f
+    private var lastLatencyMs = 0.0
+
+    private val mean = floatArrayOf(
+        -0.00063632f, -0.00029230f, -0.00027530f,
+        0.00050640f, -0.00082373f, 0.00011294f
+    )
+
+    private val std = floatArrayOf(
+        0.19478464f, 0.12235998f, 0.10680277f,
+        0.40665430f, 0.38166532f, 0.25563353f
+    )
 
     private val activityLabels = listOf(
         "WALKING",
@@ -44,8 +59,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         outputText.setPadding(32, 64, 32, 32)
         setContentView(outputText)
 
-        interpreter = Interpreter(loadModelFile("har_baseline_dynamic_quant.tflite"))
-        runDummyInference()
+        interpreter = Interpreter(loadModelFile("har_raw_window_dynamic_quant.tflite"))
 
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
 
@@ -59,29 +73,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
         sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_GAME)
-    }
 
-    private fun runDummyInference() {
-        val input = Array(1) { FloatArray(561) { 0.0f } }
-        val output = Array(1) { FloatArray(6) }
-
-        val start = System.nanoTime()
-        interpreter.run(input, output)
-        val end = System.nanoTime()
-
-        val predictedIndex = output[0].indices.maxBy { output[0][it] }
-        val confidence = output[0][predictedIndex]
-        val latencyMs = (end - start) / 1_000_000.0
-
-        outputText.text = """
-            TFLite model loaded successfully.
-
-            Dummy prediction: ${activityLabels[predictedIndex]}
-            Confidence: ${(confidence * 100).roundToInt()} percent
-            Latency: ${"%.4f".format(latencyMs)} ms
-
-            Waiting for live sensor data...
-        """.trimIndent()
+        updateSensorDisplay()
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -96,6 +89,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 latestGyro = event.values.clone()
                 gyroSamples++
             }
+        }
+
+        if (sensorWindow.size == windowSize && combinedSamples % 10 == 0) {
+            runLiveInference()
         }
 
         updateSensorDisplay()
@@ -115,11 +112,39 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
+    private fun runLiveInference() {
+        val input = Array(1) { Array(windowSize) { FloatArray(6) } }
+
+        sensorWindow.forEachIndexed { t, sample ->
+            for (c in 0 until 6) {
+                input[0][t][c] = (sample[c] - mean[c]) / std[c]
+            }
+        }
+
+        val output = Array(1) { FloatArray(6) }
+
+        val start = System.nanoTime()
+        interpreter.run(input, output)
+        val end = System.nanoTime()
+
+        val predictedIndex = output[0].indices.maxBy { output[0][it] }
+
+        lastPrediction = activityLabels[predictedIndex]
+        lastConfidence = output[0][predictedIndex]
+        lastLatencyMs = (end - start) / 1_000_000.0
+        inferenceCount++
+    }
+
     private fun updateSensorDisplay() {
         val windowReady = sensorWindow.size == windowSize
 
         outputText.text = """
-            Live Sensor Stream + Sliding Window
+            Live Raw-Window HAR Inference
+
+            Prediction: $lastPrediction
+            Confidence: ${(lastConfidence * 100).roundToInt()} percent
+            Inference latency: ${"%.4f".format(lastLatencyMs)} ms
+            Inference count: $inferenceCount
 
             Accelerometer:
             x = ${"%.3f".format(latestAccel[0])}
@@ -136,15 +161,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             Combined samples = $combinedSamples
             Window size = ${sensorWindow.size} / $windowSize
             Window ready = $windowReady
-
-            Current model expects 561 engineered UCI HAR features.
-            Next step: train raw-window model with input [128, 6].
         """.trimIndent()
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Not used yet
-    }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun loadModelFile(filename: String): ByteBuffer {
         val modelBytes = assets.open(filename).use { it.readBytes() }
