@@ -50,3 +50,14 @@ Model: Dense neural network on 561 engineered sensor features
 | P99 latency | 0.0088 ms |
 
 Note: latency was measured on laptop CPU, not yet on Android device.
+
+## Quantization Results
+
+Dynamic range quantization significantly reduced model size and improved inference latency while preserving test accuracy.
+
+| Model | Accuracy | Size | Mean Latency | P95 Latency | P99 Latency |
+|---|---:|---:|---:|---:|---:|
+| FP32 TFLite | 93.4% | 316.9 KB | 0.0072 ms | 0.0080 ms | 0.0088 ms |
+| Dynamic Quantized TFLite | 93.4% | 84.9 KB | 0.0026 ms | 0.0028 ms | 0.0037 ms |
+
+Note: latency was measured on laptop CPU. Android-device benchmarking is planned next.
