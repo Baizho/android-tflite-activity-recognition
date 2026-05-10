@@ -1,4 +1,4 @@
-# Android TFLite Activity Recognition
+# Real-Time On-Device Human Activity Recognition with TensorFlow Lite
 
 This project explores on-device human activity recognition using smartphone sensor data and TensorFlow Lite.
 
@@ -93,21 +93,62 @@ The Android application successfully:
 
 ---
 
-## Current Pipeline
+## Real-Time Embedded Inference Pipeline
 
 ```text
-Sensor Data
-    ↓
-Feature Extraction
-    ↓
-Neural Network Training
-    ↓
+Phone Accelerometer + Gyroscope
+                ↓
+Live Sensor Streaming
+                ↓
+128×6 Sliding Temporal Window
+                ↓
+Normalization
+                ↓
+Conv1D Temporal Activity Model
+                ↓
 TensorFlow Lite Conversion
-    ↓
-Quantization
-    ↓
-Android On-Device Inference
+                ↓
+Dynamic Quantization
+                ↓
+On-Device Android Inference
+                ↓
+Real-Time Activity Prediction
 ```
+---
+
+## Raw Sensor Window Model
+
+To support real-time mobile inference directly from phone sensors, a second model was trained using raw inertial windows instead of handcrafted features.
+
+### Model Architecture
+- Input: 128×6 temporal sensor window
+- Channels:
+  - Accelerometer x/y/z
+  - Gyroscope x/y/z
+- Conv1D temporal neural network
+- Output: 6 activity classes
+
+### Raw-Window Results
+
+| Model | Accuracy | Size |
+|---|---:|---:|
+| Raw Conv1D FP32 | 91.6% | ~565 KB |
+| Raw Conv1D Quantized | 91.5% | ~152 KB |
+
+This model is directly compatible with live Android sensor streaming and supports fully on-device real-time inference.
+
+---
+
+## Live Android Sensor Inference
+
+The Android application was extended to support:
+
+- Real-time accelerometer and gyroscope streaming
+- Sliding-window buffering
+- Live TensorFlow Lite inference
+- Real-time activity prediction directly on device
+
+The system performs fully on-device inference without requiring a server connection.
 
 ---
 
