@@ -140,11 +140,7 @@ The system performs fully on-device inference without requiring a server connect
 ---
 
 ## Future Work
-
-- Real-time accelerometer and gyroscope streaming
-- Sliding-window activity recognition
 - Personalized activity adaptation
 - Battery and memory profiling
-- Live Android sensor inference
 - Edge AI optimization experiments
 - Comparison between FP32 and INT8 quantization
