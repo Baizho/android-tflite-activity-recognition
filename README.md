@@ -19,3 +19,19 @@ Build an end-to-end embedded AI pipeline:
 - Android real-time sensor pipeline
 - Latency benchmarking
 - Future: personalization and quantization
+
+## Dataset
+
+Initial version uses the UCI HAR dataset.
+
+Activities:
+- WALKING
+- WALKING_UPSTAIRS
+- WALKING_DOWNSTAIRS
+- SITTING
+- STANDING
+- LAYING
+
+Training set:
+- 7,352 samples
+- 561 engineered features per sample
