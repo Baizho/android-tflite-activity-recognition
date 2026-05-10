@@ -2,19 +2,6 @@
 
 This project explores on-device human activity recognition using smartphone sensor data and TensorFlow Lite.
 
-## Goal
-
-Build a complete embedded AI pipeline:
-
-1. Train a lightweight activity recognition model
-2. Convert the model to TensorFlow Lite
-3. Optimize the model for edge deployment
-4. Deploy the model inside an Android application
-5. Run on-device inference and benchmark latency
-6. Extend toward real-time sensor streaming and personalization
-
----
-
 ## Dataset
 
 Initial experiments use the UCI HAR (Human Activity Recognition) dataset.
